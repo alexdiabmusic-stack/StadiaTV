@@ -1,5 +1,17 @@
 # StadiaTV
 
+## Firestick / Android TV
+
+The current Firestick and Android TV app lives in **[Firestick-Android-TV/](Firestick-Android-TV/)**. Open that directory in Android Studio; it is a self-contained Kotlin, Compose for TV and Media3 project with the new stream resilience engine, playlist setup, provider EPG guide, sports integration and multiview.
+
+```sh
+cd Firestick-Android-TV
+./gradlew :app:assembleDebug
+./gradlew testDebugUnitTest
+```
+
+See the [Firestick / Android TV README](Firestick-Android-TV/README.md) for setup, builds and Fire TV installation. Local provider credentials, API keys, signing keys and generated APKs are excluded from source control. The older root-level Android app and web prototype remain in their existing locations; the documentation below describes that earlier project.
+
 StadiaTV is now scaffolded as a native Android TV / Fire TV IPTV client, while the original static web prototype remains in `index.html`, `css/`, and `js/`.
 
 The Android app is a single-activity Kotlin project using Jetpack Compose, TV-focused UI surfaces, Navigation Compose, Room, WorkManager, Hilt, OkHttp, Kotlin serialization, AndroidX Media3 ExoPlayer, and Keystore-backed credential encryption.

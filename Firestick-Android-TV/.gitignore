@@ -1,0 +1,19 @@
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+.DS_Store
+.kotlin/
+
+# Release signing and build products: never committed. APKs are attached to a GitHub release instead.
+keystore.properties
+*.jks
+*.keystore
+*.apk
+*.aab
+dist/
+
+# The previous Java app, kept on disk for reference only.
+legacy/
