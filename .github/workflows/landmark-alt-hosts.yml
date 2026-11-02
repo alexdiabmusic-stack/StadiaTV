@@ -1,0 +1,53 @@
+name: Landmark alternative-host access test
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/landmark-alt-hosts.yml'
+permissions:
+  contents: read
+  issues: write
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Request the same HTML from four hosts
+        run: |
+          python - <<'PY'
+          import urllib.request
+          import urllib.error
+          from pathlib import Path
+          hosts=['www.landmarkcinemas.com','as.landmarkcinemas.com','cms.landmarkcinemas.com','pc.landmarkcinemas.com','landmarkcinemas.com']
+          lines=['# Landmark Alternative Host Probe','', 'Direct HTTP only, no Firecrawl. One request per hostname.','', '| Host | HTTP | HTML bytes | Booking anchors | Dec 17 Doomsday anchors |','|---|---:|---:|---:|---:|']
+          for host in hosts:
+              req=urllib.request.Request('https://'+host+'/showtimes/orleans',headers={'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/537.36 Chrome/129.0.0.0 Safari/537.36','Accept':'text/html,application/xhtml+xml,*/*;q=0.8','Accept-Language':'en-CA,en;q=0.9'})
+              try:
+                  with urllib.request.urlopen(req,timeout=12) as f:
+                      body=f.read().decode('utf8','replace')
+                      status=f.status
+                  from html.parser import HTMLParser
+                  class P(HTMLParser):
+                      def __init__(self): super().__init__();self.total=0;self.target=0
+                      def handle_starttag(self, tag, attrs):
+                          if tag!='a':return
+                          a=dict(attrs)
+                          if 'data-session-booking-btn' not in a:return
+                          self.total+=1
+                          title=a.get('title','')
+                          if 'Avengers: Doomsday' in title and 'Thursday, December 17' in title:self.target+=1
+                  p=P();p.feed(body)
+                  lines.append(f'| {host} | {status} | {len(body)} | {p.total} | {p.target} |')
+              except urllib.error.HTTPError as e:
+                  lines.append(f'| {host} | {e.code} | 0 | 0 | 0 |')
+              except Exception as e:
+                  lines.append(f'| {host} | {type(e).__name__}: {str(e)[:40]} | 0 | 0 | 0 |')
+          result='\n'.join(lines)
+          print(result)
+          Path('/tmp/host_report.md').write_text(result)
+          PY
+      - name: Publish report
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue create --repo "$GITHUB_REPOSITORY" --title "Landmark alternative host test result" --body-file /tmp/host_report.md
