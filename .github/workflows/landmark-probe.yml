@@ -1,0 +1,75 @@
+name: Landmark Orléans one-request test
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/landmark-probe.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  test-landmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch and parse the live showtimes page
+        shell: bash
+        run: |
+          python - <<'PY'
+          from urllib.request import Request, urlopen
+          from urllib.error import HTTPError, URLError
+          from html.parser import HTMLParser
+          from urllib.parse import urljoin, urlparse, parse_qs
+          from pathlib import Path
+          import traceback
+
+          class Sessions(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.rows = []
+              def handle_starttag(self, tag, attrs):
+                  if tag.lower() != 'a': return
+                  a=dict(attrs)
+                  if 'data-session-booking-btn' not in a: return
+                  title=a.get('title','')
+                  if 'Avengers: Doomsday' not in title or 'on Thursday, December 17 at ' not in title:return
+                  href=a.get('href','')
+                  url=urljoin('https://www.landmarkcinemas.com', href)
+                  q=parse_qs(urlparse(url).query)
+                  if q.get('cinemaId',[''])[0]!='193': return
+                  sid=q.get('sessionId',[''])[0]
+                  self.rows.append({'time': title.split(' at ')[-1], 'format':title.split(' on Thursday, December 17 at ')[0], 'url':url, 'sessionId':sid})
+
+          url='https://www.landmarkcinemas.com/showtimes/orleans'
+          result=['# Landmark Orléans direct-fetch test','', 'One ordinary HTTP request; no Firecrawl, no browser.','']
+          try:
+              req=Request(url,headers={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36','Accept':'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8','Accept-Language':'en-CA,en;q=0.9'})
+              with urlopen(req, timeout=25) as response:
+                  status=response.status
+                  html=response.read().decode('utf-8','replace')
+              p=Sessions();p.feed(html)
+              result.extend([f'HTTP status: {status}',f'HTML bytes: {len(html)}',f'December 17 Doomsday sessions: {len(p.rows)}',''])
+              for row in sorted(p.rows,key=lambda r:r['time']):
+                  result.append(f"- {row['time']} — {row['format']} — `{row['sessionId']}` — {row['url']}")
+              baseline={'11519167','11528446','11528447','11519168','11528448'}
+              found={r['sessionId'] for r in p.rows}
+              result.extend(['',f'Five known baseline sessions found: {baseline.issubset(found)}','New IDs: '+str(sorted(found-baseline))])
+              if not p.rows:
+                  result.append('WARNING: Zero matching anchors. Landmark may block direct HTTP or require JavaScript rendering.')
+          except Exception as e:
+              result.extend(['Direct fetch FAILED:', f'{type(e).__name__}: {e}'])
+              traceback.print_exc()
+          body='\n'.join(result)
+          print(body)
+          Path('/tmp/landmark_probe_report.md').write_text(body)
+          PY
+      - name: Publish result as an issue
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f /tmp/landmark_probe_report.md ]; then
+            gh issue create -R "$GITHUB_REPOSITORY" --title "Landmark monitor probe result" --body-file /tmp/landmark_probe_report.md
+          fi
